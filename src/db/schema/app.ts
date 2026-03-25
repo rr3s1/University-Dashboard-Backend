@@ -1,4 +1,4 @@
-import { pgTable, timestamp, integer, varchar, text } from "drizzle-orm/pg-core";
+import { pgTable, timestamp, integer, varchar, text, index } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
 const timestamps = {
@@ -19,7 +19,9 @@ export const departments = pgTable("departments", {
   });
 
 
-  export const subjects = pgTable("subjects", {
+export const subjects = pgTable(
+  "subjects",
+  {
     id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
     departmentId: integer("department_id")
       .notNull()
@@ -28,7 +30,11 @@ export const departments = pgTable("departments", {
     code: varchar("code", { length: 50 }).notNull().unique(),
     description: text("description"),
     ...timestamps,
-  });
+  },
+  (table) => ({
+    departmentIdIdx: index("subjects_department_id_idx").on(table.departmentId),
+  }),
+);
 
 
   export const departmentsRelations = relations(departments, ({ many }) => ({
