@@ -1,6 +1,7 @@
 import express from "express";
-import subjectsRouter from './routes/subjects';
-import cors from 'cors';
+import subjectsRouter from "./routes/subjects";
+import departmentsRouter from "./routes/departments";
+import cors from "cors";
 
 const app = express();
 
@@ -14,7 +15,8 @@ app.use(cors({
   credentials: true,
 }));
 
-app.use('/api/subjects', subjectsRouter)
+app.use("/api/subjects", subjectsRouter);
+app.use("/api/departments", departmentsRouter);
 
 app.get("/", (_req, res) => {
   res.status(200).send("University Dashboard API is running.");
