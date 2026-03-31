@@ -1,6 +1,6 @@
 import express from 'express';
 import { subjects, departments } from '../db/schema';
-import { ilike, or, and, sql, eq, getTableColumns, desc } from 'drizzle-orm';
+import { ilike, or, and, sql, eq, getTableColumns, desc, asc } from 'drizzle-orm';
 import { db } from '../db';
 
 
@@ -30,6 +30,28 @@ try {
     const limitPerPage = Math.max(1, Number(limitStr ?? 10));
 
     const offset = (currentPage - 1) * limitPerPage;
+
+    const sortRaw =
+      typeof query.sort === 'string' ? query.sort.toLowerCase() : undefined;
+    const orderRaw =
+      typeof query.order === 'string' ? query.order.toLowerCase() : 'desc';
+    const direction = orderRaw === 'asc' ? 'asc' : 'desc';
+
+    const sortColumn =
+      sortRaw === 'id'
+        ? subjects.id
+        : sortRaw === 'code'
+          ? subjects.code
+          : sortRaw === 'name'
+            ? subjects.name
+            : sortRaw === 'description'
+              ? subjects.description
+              : sortRaw === 'department'
+                ? departments.name
+                : subjects.createdAt;
+
+    const orderClause =
+      direction === 'asc' ? asc(sortColumn) : desc(sortColumn);
 
     const filterConditions = [];
     // If search exists, filter by subject name OR subject code
@@ -72,7 +94,7 @@ try {
       .from(subjects)
       .leftJoin(departments, eq(subjects.departmentId, departments.id))
       .where(whereClause)
-      .orderBy(desc(subjects.createdAt))
+      .orderBy(orderClause)
       .limit(limitPerPage)
       .offset(offset);
 
