@@ -2,6 +2,7 @@ import express from "express";
 import subjectsRouter from "./routes/subjects";
 import departmentsRouter from "./routes/departments";
 import cors from "cors";
+import authMiddleware from "./middleware/auth";
 import securityMiddleware from "./middleware/security";
 
 const app = express();
@@ -9,14 +10,15 @@ const app = express();
 // Parse incoming JSON bodies.
 app.use(express.json());
 
-app.use(securityMiddleware);
-
-// Enable CORS for all routes.
+// CORS before security so OPTIONS preflight gets headers before Arcjet runs.
 app.use(cors({
   origin: process.env.FRONTEND_URL,
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   credentials: true,
 }));
+
+app.use(authMiddleware);
+app.use(securityMiddleware);
 
 app.use("/api/subjects", subjectsRouter);
 app.use("/api/departments", departmentsRouter);
