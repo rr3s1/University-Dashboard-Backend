@@ -2,11 +2,14 @@ import express from "express";
 import subjectsRouter from "./routes/subjects";
 import departmentsRouter from "./routes/departments";
 import cors from "cors";
+import securityMiddleware from "./middleware/security";
 
 const app = express();
 
 // Parse incoming JSON bodies.
 app.use(express.json());
+
+app.use(securityMiddleware);
 
 // Enable CORS for all routes.
 app.use(cors({
