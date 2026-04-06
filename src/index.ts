@@ -17,6 +17,14 @@ app.use(cors({
   credentials: true,
 }));
 
+// Before auth/security so short-circuit responses (401/403/429) still get the header.
+app.use((req, res, next) => {
+  if (req.path.startsWith("/api")) {
+    res.setHeader("Cache-Control", "no-store, max-age=0");
+  }
+  next();
+});
+
 app.use(authMiddleware);
 app.use(securityMiddleware);
 

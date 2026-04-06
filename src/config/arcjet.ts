@@ -5,12 +5,18 @@ if (!process.env.ARCJET_KEY && process.env.NODE_ENV !== "test") {
       "ARCJET_KEY environment variable is required."
     );
   }
-  
+
+/** Comma-separated IPs/CIDRs of trusted load balancers so client IP uses X-Forwarded-For. */
+const trustedProxies = process.env.ARCJET_TRUSTED_PROXIES
+  ?.split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
 
 const aj = arcjet({
     // Get your site key from https://app.arcjet.com and set it as an environment
     // variable rather than hard coding.
     key: process.env.ARCJET_KEY!,
+    ...(trustedProxies?.length ? { proxies: trustedProxies } : {}),
     rules: [
       // Shield protects your app from common attacks e.g. SQL injection
       shield({ mode: "LIVE" }),
