@@ -1,5 +1,4 @@
 import { slidingWindow } from "@arcjet/node";
-import type { ArcjetNodeRequest } from "@arcjet/node";
 import type { NextFunction, Request, Response } from "express";
 
 import aj from "../config/arcjet.js";
@@ -45,16 +44,9 @@ const securityMiddleware = async (
       })
     );
 
-    const arcjetRequest: ArcjetNodeRequest = {
-      headers: req.headers,
-      method: req.method,
-      url: req.originalUrl ?? req.url,
-      socket: {
-        remoteAddress: req.socket.remoteAddress ?? req.ip ?? "0.0.0.0",
-      },
-    };
-
-    const decision = await client.protect(arcjetRequest);
+    // Pass the real Express request so @arcjet/ip can use `req.ip`, full `socket`, and headers.
+    // A hand-built object with `remoteAddress: "0.0.0.0"` is rejected as non-global and yields an empty IP.
+    const decision = await client.protect(req);
 
     if (decision.isDenied()) {
       const reason = decision.reason;

@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express from "express";
 import subjectsRouter from "./routes/subjects";
 import departmentsRouter from "./routes/departments";
@@ -19,6 +20,14 @@ app.use(cors({
 
 app.use(authMiddleware);
 app.use(securityMiddleware);
+
+// Prevent browsers from caching API GETs (cached 200s bypass the network and hide 429 rate-limit responses).
+app.use((req, res, next) => {
+  if (req.path.startsWith("/api")) {
+    res.setHeader("Cache-Control", "no-store, max-age=0");
+  }
+  next();
+});
 
 app.use("/api/subjects", subjectsRouter);
 app.use("/api/departments", departmentsRouter);
