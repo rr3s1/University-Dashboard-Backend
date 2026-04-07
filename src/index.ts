@@ -16,19 +16,19 @@ app.use(cors({
   credentials: true,
 }));
 
-// Better Auth must run before express.json() — the JSON parser consumes the body
-// and breaks the auth handler (see https://www.better-auth.com/docs/integrations/express).
-app.all('/api/auth/{*splat}', toNodeHandler(auth));
-
-app.use(express.json());
-
-// Before auth/security so short-circuit responses (401/403/429) still get the header.
+// Cache-Control for all /api responses, including Better Auth (must run before the auth handler).
 app.use((req, res, next) => {
   if (req.path.startsWith("/api")) {
     res.setHeader("Cache-Control", "no-store, max-age=0");
   }
   next();
 });
+
+// Better Auth must run before express.json() — the JSON parser consumes the body
+// and breaks the auth handler (see https://www.better-auth.com/docs/integrations/express).
+app.all('/api/auth/{*splat}', toNodeHandler(auth));
+
+app.use(express.json());
 
 app.use(authMiddleware);
 app.use(securityMiddleware);
