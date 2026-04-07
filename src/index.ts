@@ -4,11 +4,10 @@ import departmentsRouter from "./routes/departments";
 import cors from "cors";
 import authMiddleware from "./middleware/auth";
 import securityMiddleware from "./middleware/security";
+import { auth } from "./lib/auth";
+import { toNodeHandler } from "better-auth/node";
 
 const app = express();
-
-// Parse incoming JSON bodies.
-app.use(express.json());
 
 // CORS before security so OPTIONS preflight gets headers before Arcjet runs.
 app.use(cors({
@@ -17,13 +16,19 @@ app.use(cors({
   credentials: true,
 }));
 
-// Before auth/security so short-circuit responses (401/403/429) still get the header.
+// Cache-Control for all /api responses, including Better Auth (must run before the auth handler).
 app.use((req, res, next) => {
   if (req.path.startsWith("/api")) {
     res.setHeader("Cache-Control", "no-store, max-age=0");
   }
   next();
 });
+
+// Better Auth must run before express.json() — the JSON parser consumes the body
+// and breaks the auth handler (see https://www.better-auth.com/docs/integrations/express).
+app.all('/api/auth/{*splat}', toNodeHandler(auth));
+
+app.use(express.json());
 
 app.use(authMiddleware);
 app.use(securityMiddleware);
