@@ -6,6 +6,9 @@ import authMiddleware from "./middleware/auth";
 import securityMiddleware from "./middleware/security";
 import { auth } from "./lib/auth";
 import { toNodeHandler } from "better-auth/node";
+import AgentAPI from "apminsight";
+
+AgentAPI.config()
 
 const app = express();
 
