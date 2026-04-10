@@ -1,10 +1,10 @@
 import express from "express";
-import subjectsRouter from "./routes/subjects";
-import departmentsRouter from "./routes/departments";
+import subjectsRouter from "./routes/subjects.js";
+import departmentsRouter from "./routes/departments.js";
 import cors from "cors";
-import authMiddleware from "./middleware/auth";
-import securityMiddleware from "./middleware/security";
-import { auth } from "./lib/auth";
+import authMiddleware from "./middleware/auth.js";
+import securityMiddleware from "./middleware/security.js";
+import { auth } from "./lib/auth.js";
 import { toNodeHandler } from "better-auth/node";
 import AgentAPI from "apminsight";
 
