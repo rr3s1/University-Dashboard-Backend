@@ -1,5 +1,5 @@
 import express from "express";
-import { departments } from "../db/schema/index.js";
+import { user } from "../db/schema/index.js";
 import { desc, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { parsePaginationQuery } from "../lib/pagination.js";
@@ -17,14 +17,22 @@ router.get("/", async (_req, res) => {
 
     const countResult = await db
       .select({ count: sql<number>`count(*)` })
-      .from(departments);
+      .from(user);
 
     const totalCount = Number(countResult[0]?.count ?? 0);
 
     const rows = await db
-      .select()
-      .from(departments)
-      .orderBy(desc(departments.createdAt))
+      .select({
+        id: user.id,
+        name: user.name,
+        image: user.image,
+        role: user.role,
+        imageCldPubId: user.imageCldPubId,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+      })
+      .from(user)
+      .orderBy(desc(user.createdAt))
       .limit(limitPerPage)
       .offset(offset);
 
@@ -38,8 +46,8 @@ router.get("/", async (_req, res) => {
       },
     });
   } catch (e) {
-    console.error("GET /departments error:", e);
-    return res.status(500).json({ error: "Failed to get departments" });
+    console.error("GET /users error:", e);
+    return res.status(500).json({ error: "Failed to get users" });
   }
 });
 

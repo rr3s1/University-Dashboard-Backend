@@ -2,6 +2,7 @@ import express from 'express';
 import { subjects, departments } from '../db/schema/index.js';
 import { ilike, or, and, sql, eq, getTableColumns, desc, asc } from 'drizzle-orm';
 import { db } from '../db/index.js';
+import { parsePaginationQuery } from '../lib/pagination.js';
 
 
 const router = express.Router();
@@ -21,15 +22,11 @@ try {
           ? query.filter
           : undefined;
 
-    const pageRaw = query.page;
-    const limitRaw = query.limit;
-    const pageStr = Array.isArray(pageRaw) ? pageRaw[0] : pageRaw;
-    const limitStr = Array.isArray(limitRaw) ? limitRaw[0] : limitRaw;
-
-    const currentPage = Math.max(1, Number(pageStr ?? 1));
-    const limitPerPage = Math.max(1, Number(limitStr ?? 10));
-
-    const offset = (currentPage - 1) * limitPerPage;
+    const parsed = parsePaginationQuery(query.page, query.limit);
+    if (!parsed.ok) {
+      return res.status(400).json({ error: parsed.error });
+    }
+    const { currentPage, limitPerPage, offset } = parsed;
 
     const sortRaw =
       typeof query.sort === 'string' ? query.sort.toLowerCase() : undefined;
