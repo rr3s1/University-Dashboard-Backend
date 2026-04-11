@@ -68,6 +68,7 @@ export const classes = pgTable(
     bannerCldPubId: text("banner_cld_pub_id"),
     bannerUrl: text("banner_url"),
     description: text("description"),
+    startDate: timestamp("start_date"),
     capacity: integer("capacity").notNull().default(50),
     status: classStatusEnum("status").notNull().default("active"),
     schedules: jsonb("schedules")

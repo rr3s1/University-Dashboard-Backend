@@ -2,20 +2,18 @@ import express from "express";
 import { user } from "../db/schema/index.js";
 import { desc, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
+import { parsePaginationQuery } from "../lib/pagination.js";
 
 const router = express.Router();
 
 router.get("/", async (_req, res) => {
   try {
     const query = _req.query as Record<string, unknown>;
-    const pageRaw = query.page;
-    const limitRaw = query.limit;
-    const pageStr = Array.isArray(pageRaw) ? pageRaw[0] : pageRaw;
-    const limitStr = Array.isArray(limitRaw) ? limitRaw[0] : limitRaw;
-
-    const currentPage = Math.max(1, Number(pageStr ?? 1));
-    const limitPerPage = Math.max(1, Number(limitStr ?? 10));
-    const offset = (currentPage - 1) * limitPerPage;
+    const parsed = parsePaginationQuery(query.page, query.limit);
+    if (!parsed.ok) {
+      return res.status(400).json({ error: parsed.error });
+    }
+    const { currentPage, limitPerPage, offset } = parsed;
 
     const countResult = await db
       .select({ count: sql<number>`count(*)` })
@@ -24,7 +22,15 @@ router.get("/", async (_req, res) => {
     const totalCount = Number(countResult[0]?.count ?? 0);
 
     const rows = await db
-      .select()
+      .select({
+        id: user.id,
+        name: user.name,
+        image: user.image,
+        role: user.role,
+        imageCldPubId: user.imageCldPubId,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+      })
       .from(user)
       .orderBy(desc(user.createdAt))
       .limit(limitPerPage)
