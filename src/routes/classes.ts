@@ -1,8 +1,50 @@
+import { randomBytes } from "node:crypto";
+
 import express from "express";
+import { eq, sql } from "drizzle-orm";
+
 import { db } from "../db/index.js";
-import { classes } from "../db/schema/index.js";
+import { classes, subjects, user } from "../db/schema/index.js";
 
 const router = express.Router();
+
+/** Walk Drizzle `DrizzleQueryError`, Neon `NeonDbError`, and nested `cause` / `sourceError`. */
+function readPostgresErrorCode(err: unknown): string | undefined {
+  let current: unknown = err;
+  const seen = new Set<unknown>();
+  for (let i = 0; i < 10 && current && typeof current === "object" && !seen.has(current); i++) {
+    seen.add(current);
+    const o = current as Record<string, unknown>;
+    const code = o.code;
+    if (typeof code === "string" && /^[0-9A-Z]{5}$/.test(code)) {
+      return code;
+    }
+    current = o.cause ?? o.sourceError;
+  }
+  return undefined;
+}
+
+function readPostgresErrorFields(err: unknown): {
+  code?: string;
+  message?: string;
+  detail?: string;
+} {
+  let current: unknown = err;
+  const seen = new Set<unknown>();
+  for (let i = 0; i < 10 && current && typeof current === "object" && !seen.has(current); i++) {
+    seen.add(current);
+    const o = current as Record<string, unknown>;
+    if (typeof o.code === "string" || typeof o.message === "string" || typeof o.detail === "string") {
+      return {
+        ...(typeof o.code === "string" ? { code: o.code } : {}),
+        ...(typeof o.message === "string" ? { message: o.message } : {}),
+        ...(typeof o.detail === "string" ? { detail: o.detail } : {}),
+      };
+    }
+    current = o.cause ?? o.sourceError;
+  }
+  return {};
+}
 
 const CLASS_STATUSES = ["active", "inactive", "archived"] as const;
 
@@ -41,10 +83,14 @@ function parseCreateClassBody(body: unknown):
   }
 
   const teacherIdRaw = body.teacherId;
-  if (typeof teacherIdRaw !== "string" || teacherIdRaw.trim().length === 0) {
+  let teacherId: string;
+  if (typeof teacherIdRaw === "string" && teacherIdRaw.trim().length > 0) {
+    teacherId = teacherIdRaw.trim();
+  } else if (typeof teacherIdRaw === "number" && Number.isFinite(teacherIdRaw)) {
+    teacherId = String(teacherIdRaw);
+  } else {
     return { ok: false, message: "teacherId is required" };
   }
-  const teacherId = teacherIdRaw.trim();
 
   const subjectIdRaw = body.subjectId;
   const subjectId =
@@ -145,43 +191,103 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: parsed.message });
     }
 
-    const inviteCode = Math.random().toString(36).substring(2, 9);
-    const schedules = [] as Record<string, unknown>[];
-
-    const insertValues = {
-      ...parsed.fields,
-      inviteCode,
-      schedules,
-    };
-
-    const [createdClass] = await db
-      .insert(classes)
-      .values(insertValues)
-      .returning({
-        id: classes.id,
-        name: classes.name,
-        subjectId: classes.subjectId,
-        teacherId: classes.teacherId,
-        description: classes.description,
-        inviteCode: classes.inviteCode,
-        schedules: classes.schedules,
-        capacity: classes.capacity,
-        status: classes.status,
-        bannerUrl: classes.bannerUrl,
-        bannerCldPubId: classes.bannerCldPubId,
-        startDate: classes.startDate,
-        createdAt: classes.createdAt,
-        updatedAt: classes.updatedAt,
-      });
-
-    if (!createdClass) {
-      throw new Error("Insert returned no row");
+    const [subjectRow] = await db
+      .select({ id: subjects.id })
+      .from(subjects)
+      .where(eq(subjects.id, parsed.fields.subjectId))
+      .limit(1);
+    if (!subjectRow) {
+      return res.status(400).json({ error: "Subject does not exist" });
     }
 
-    res.status(201).json({ data: createdClass });
+    const [teacherRow] = await db
+      .select({ id: user.id })
+      .from(user)
+      .where(eq(user.id, parsed.fields.teacherId))
+      .limit(1);
+    if (!teacherRow) {
+      return res.status(400).json({ error: "Teacher does not exist" });
+    }
+
+    const returning = {
+      id: classes.id,
+      name: classes.name,
+      subjectId: classes.subjectId,
+      teacherId: classes.teacherId,
+      description: classes.description,
+      inviteCode: classes.inviteCode,
+      schedules: classes.schedules,
+      capacity: classes.capacity,
+      status: classes.status,
+      bannerUrl: classes.bannerUrl,
+      bannerCldPubId: classes.bannerCldPubId,
+      startDate: classes.startDate,
+      createdAt: classes.createdAt,
+      updatedAt: classes.updatedAt,
+    };
+
+    const maxAttempts = 5;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const inviteCode = randomBytes(12).toString("base64url").slice(0, 16);
+      const insertValues = {
+        ...parsed.fields,
+        inviteCode,
+        /** Explicit JSON so Neon/Drizzle never relies on a mismatched DB default for `schedules`. */
+        schedules: sql`'[]'::jsonb`,
+      };
+
+      try {
+        const [createdClass] = await db
+          .insert(classes)
+          .values(insertValues)
+          .returning(returning);
+
+        if (!createdClass) {
+          throw new Error("Insert returned no row");
+        }
+
+        return res.status(201).json({ data: createdClass });
+      } catch (e) {
+        const pgCode = readPostgresErrorCode(e);
+        if (pgCode === "23505" && attempt < maxAttempts - 1) {
+          continue;
+        }
+        if (pgCode === "23503") {
+          return res.status(400).json({
+            error: "Invalid subject or teacher (foreign key violation)",
+          });
+        }
+        if (pgCode === "23505") {
+          return res.status(409).json({
+            error: "Could not allocate a unique invite code; try again",
+          });
+        }
+        throw e;
+      }
+    }
+
+    return res.status(409).json({
+      error: "Could not allocate a unique invite code; try again",
+    });
   } catch (e) {
-    console.error(`POST /classes error ${e}`);
-    res.status(500).json({ error: "Failed to create class" });
+    const pg = readPostgresErrorFields(e);
+    console.error(`POST /classes error`, e, pg);
+
+    const pgCode = readPostgresErrorCode(e);
+    if (pgCode === "42703") {
+      return res.status(503).json({
+        error:
+          "Database schema is missing a column this API expects (e.g. `classes.start_date`). From `craft-backend` run `npm run db:migrate` (applies migration `0004_classes_start_date_if_missing` if needed). In Neon you can also run: ALTER TABLE classes ADD COLUMN IF NOT EXISTS start_date timestamp;",
+      });
+    }
+
+    const exposePg = process.env.NODE_ENV !== "production";
+    res.status(500).json({
+      error: "Failed to create class",
+      ...(exposePg && (pg.code || pg.detail || pg.message)
+        ? { postgres: { code: pg.code, detail: pg.detail, message: pg.message } }
+        : {}),
+    });
   }
 });
 
